@@ -1,0 +1,6 @@
+{
+  "name": "SmartStock",
+  "description": "AI-powered inventory management, demand forecasting, scenario analysis, and purchasing optimization platform for Indian retail businesses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
