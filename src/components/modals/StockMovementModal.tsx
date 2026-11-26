@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowDownLeft, ArrowUpRight, SlidersHorizontal } from 'lucide-react';
 import type { EnrichedProduct } from '../../lib/api';
 import { formatINR } from '../../lib/formatters';
+import { validateMovementInput } from '../../lib/validation';
 import { Modal } from '../ui/Modal';
 
 interface StockMovementModalProps {
@@ -58,21 +59,22 @@ export function StockMovementModal({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!validQty) {
-      setError('Enter a valid quantity greater than zero.');
-      return;
-    }
-    if (mode === 'sale' && Math.round(qtyNum) > product.quantity) {
-      setError(`Only ${product.quantity} ${product.unit} available in stock.`);
+
+    const validated = validateMovementInput(
+      { type: mode, quantity: qtyNum, note },
+      product.quantity
+    );
+    if (!validated.ok) {
+      setError(validated.error);
       return;
     }
 
     setSubmitting(true);
     try {
       await onSubmit(product.id, {
-        type: mode,
-        quantity: Math.round(qtyNum),
-        note: note.trim() || undefined,
+        type: validated.data.type,
+        quantity: validated.data.quantity,
+        note: validated.data.note || undefined,
       });
       onClose();
     } catch (err) {
@@ -94,16 +96,20 @@ export function StockMovementModal({
         {error && (
           <div
             role="alert"
-            className="px-3.5 py-2.5 rounded-lg bg-[#C65353]/10 border border-[#C65353]/30 text-sm text-[#A33B3B]"
+            className="px-3.5 py-2.5 rounded-lg bg-[#C65353]/12 border border-[#C65353]/35 text-sm text-[#8C2D2D]"
           >
             {error}
           </div>
         )}
 
-        {/* Movement Type Segmented Control */}
-        <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[#EEEAE0] border border-[#E4DFD4]">
+        <div
+          role="group"
+          aria-label="Movement type"
+          className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[#EEEAE0] border border-[#E4DFD4]"
+        >
           <button
             type="button"
+            aria-pressed={mode === 'restock'}
             onClick={() => {
               setMode('restock');
               if (product.forecast.recommendedOrderQty > 0) {
@@ -113,14 +119,15 @@ export function StockMovementModal({
             className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-semibold transition-colors ${
               mode === 'restock'
                 ? 'bg-[#145A43] text-white shadow-xs'
-                : 'text-[#6B746E] hover:text-[#292F2C]'
+                : 'text-[#525A54] hover:text-[#292F2C]'
             }`}
           >
-            <ArrowDownLeft className="w-3.5 h-3.5" />
+            <ArrowDownLeft className="w-3.5 h-3.5" aria-hidden="true" />
             Restock
           </button>
           <button
             type="button"
+            aria-pressed={mode === 'sale'}
             onClick={() => {
               setMode('sale');
               setQuantity(String(Math.min(10, Math.max(1, product.quantity))));
@@ -128,14 +135,15 @@ export function StockMovementModal({
             className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-semibold transition-colors ${
               mode === 'sale'
                 ? 'bg-[#E6A23C] text-[#104735] shadow-xs'
-                : 'text-[#6B746E] hover:text-[#292F2C]'
+                : 'text-[#525A54] hover:text-[#292F2C]'
             }`}
           >
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
             Record Sale
           </button>
           <button
             type="button"
+            aria-pressed={mode === 'adjustment'}
             onClick={() => {
               setMode('adjustment');
               setQuantity(String(product.quantity));
@@ -143,24 +151,23 @@ export function StockMovementModal({
             className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-md text-xs font-semibold transition-colors ${
               mode === 'adjustment'
                 ? 'bg-[#FFFEFA] text-[#292F2C] shadow-xs'
-                : 'text-[#6B746E] hover:text-[#292F2C]'
+                : 'text-[#525A54] hover:text-[#292F2C]'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
             Audit Count
           </button>
         </div>
 
-        {/* Summary Strip */}
         <div className="grid grid-cols-3 gap-3 p-3.5 rounded-lg bg-[#F5F1E8] border border-[#E4DFD4] text-xs">
           <div>
-            <div className="text-[#6B746E]">Current Stock</div>
+            <div className="text-[#525A54]">Current Stock</div>
             <div className="font-mono-num text-sm font-semibold text-[#292F2C] mt-0.5">
               {product.quantity} {product.unit}
             </div>
           </div>
           <div>
-            <div className="text-[#6B746E]">
+            <div className="text-[#525A54]">
               {mode === 'restock' ? 'Recommended PO' : mode === 'sale' ? 'Unit Price' : 'Reorder Point'}
             </div>
             <div className="font-mono-num text-sm font-semibold text-[#145A43] mt-0.5">
@@ -174,10 +181,10 @@ export function StockMovementModal({
             </div>
           </div>
           <div>
-            <div className="text-[#6B746E]">Resulting Stock</div>
+            <div className="text-[#525A54]">Resulting Stock</div>
             <div
               className={`font-mono-num text-sm font-semibold mt-0.5 ${
-                resultingQty < 0 ? 'text-[#C65353]' : 'text-[#292F2C]'
+                resultingQty < 0 ? 'text-[#8C2D2D]' : 'text-[#292F2C]'
               }`}
             >
               {Math.max(0, resultingQty)} {product.unit}
@@ -187,7 +194,7 @@ export function StockMovementModal({
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium text-[#292F2C]">
+            <label htmlFor="movement-qty" className="text-xs font-medium text-[#292F2C]">
               {mode === 'adjustment'
                 ? `Verified Physical Count (${product.unit})`
                 : `Quantity (${product.unit})`}
@@ -203,27 +210,30 @@ export function StockMovementModal({
             )}
           </div>
           <input
+            id="movement-qty"
             type="number"
             min="1"
             step="1"
             required
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+            className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
           />
           {mode === 'restock' && validQty && (
-            <p className="text-xs text-[#6B746E] mt-1.5 font-mono-num">
+            <p className="text-xs text-[#525A54] mt-1.5 font-mono-num">
               Estimated PO cost: {formatINR(Math.round(qtyNum * product.purchasePrice))}
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-[#292F2C] mb-1">
+          <label htmlFor="movement-note" className="block text-xs font-medium text-[#292F2C] mb-1">
             Reference Note (Optional)
           </label>
           <input
+            id="movement-note"
             type="text"
+            maxLength={140}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder={
@@ -233,7 +243,7 @@ export function StockMovementModal({
                   ? 'POS daily checkout batch'
                   : 'Weekly shelf verification'
             }
-            className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+            className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
           />
         </div>
 

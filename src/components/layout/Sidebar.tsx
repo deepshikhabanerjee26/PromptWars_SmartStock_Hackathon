@@ -87,7 +87,7 @@ export function Sidebar({
             <div className="font-display text-lg font-bold tracking-tight leading-none text-[#FFFEFA]">
               SmartStock
             </div>
-            <div className="text-[11px] text-[#D7E4DE] mt-1 truncate">
+            <div className="text-[11px] text-[#DCE8E2] mt-1 truncate">
               Retail Demand & Supply
             </div>
           </div>
@@ -96,17 +96,17 @@ export function Sidebar({
           type="button"
           onClick={onCloseMobile}
           aria-label="Close navigation menu"
-          className="lg:hidden p-1.5 rounded-lg text-[#D7E4DE] hover:text-white hover:bg-white/10"
+          className="lg:hidden p-1.5 rounded-lg text-[#DCE8E2] hover:text-white hover:bg-white/10 focus-visible:outline-[#E6A23C]"
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5" aria-hidden="true" />
         </button>
       </div>
 
       {/* Navigation Sections */}
-      <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6" aria-label="Main navigation">
+      <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6" aria-label="Primary navigation">
         {groups.map((group) => (
           <div key={group.label}>
-            <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-[#A9C7B9] uppercase">
+            <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-[#DCE8E2] uppercase">
               {group.label}
             </div>
             <ul className="space-y-1">
@@ -117,24 +117,28 @@ export function Sidebar({
                   <li key={item.id}>
                     <button
                       type="button"
+                      aria-current={active ? 'page' : undefined}
                       onClick={() => handleSelect(item.id)}
-                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-[#E6A23C] ${
                         active
-                          ? 'bg-[#104735] text-[#FFFEFA] shadow-xs ring-1 ring-white/12'
-                          : 'text-[#DCE8E2] hover:bg-[#104735]/60 hover:text-white'
+                          ? 'bg-[#104735] text-[#FFFEFA] shadow-xs ring-1 ring-white/15'
+                          : 'text-[#EFF6F2] hover:bg-[#104735]/60 hover:text-white'
                       }`}
                     >
                       <span className="flex items-center gap-3 min-w-0">
                         <Icon
                           className={`w-4 h-4 shrink-0 ${
-                            active ? 'text-[#E6A23C]' : 'text-[#A9C7B9]'
+                            active ? 'text-[#E6A23C]' : 'text-[#DCE8E2]'
                           }`}
                           aria-hidden="true"
                         />
                         <span className="truncate">{item.label}</span>
                       </span>
                       {item.badge !== undefined && (
-                        <span className="font-mono-num text-[11px] font-semibold px-1.5 py-0.5 rounded bg-[#E6A23C] text-[#104735] shrink-0">
+                        <span
+                          aria-label={`${item.badge} alerts`}
+                          className="font-mono-num text-[11px] font-semibold px-1.5 py-0.5 rounded bg-[#E6A23C] text-[#104735] shrink-0"
+                        >
                           {item.badge}
                         </span>
                       )}
@@ -152,7 +156,7 @@ export function Sidebar({
         <div className="flex items-center gap-3">
           <img
             src="/src/assets/images/avatar_store_manager_1795627654741.jpg"
-            alt="Ananya Sharma"
+            alt="Portrait of Ananya Sharma, Store Operations Lead"
             referrerPolicy="no-referrer"
             className="w-9 h-9 rounded-lg object-cover border border-white/20 shrink-0"
           />
@@ -160,7 +164,7 @@ export function Sidebar({
             <div className="text-sm font-semibold text-[#FFFEFA] truncate">
               Ananya Sharma
             </div>
-            <div className="text-[11px] text-[#A9C7B9] truncate">
+            <div className="text-[11px] text-[#DCE8E2] truncate">
               Store Operations Lead
             </div>
           </div>
@@ -171,12 +175,10 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop Permanent Sidebar */}
-      <aside className="hidden lg:block w-64 shrink-0 border-r border-[#104735]">
+      <aside className="hidden lg:block w-64 shrink-0 border-r border-[#104735]" aria-label="Sidebar">
         <div className="sticky top-0 h-screen">{sidebarBody}</div>
       </aside>
 
-      {/* Mobile Collapsible Drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div
@@ -184,7 +186,7 @@ export function Sidebar({
             onClick={onCloseMobile}
             aria-hidden="true"
           />
-          <aside className="relative w-72 max-w-[85vw] h-full shadow-2xl z-10">
+          <aside className="relative w-72 max-w-[85vw] h-full shadow-2xl z-10" aria-label="Mobile sidebar navigation">
             {sidebarBody}
           </aside>
         </div>

@@ -5,11 +5,11 @@ export function formatINR(amount: number): string {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 export function formatNumber(val: number): string {
-  return new Intl.NumberFormat('en-IN').format(val);
+  return new Intl.NumberFormat('en-IN').format(Number.isFinite(val) ? val : 0);
 }
 
 export function formatRelativeTime(isoString: string): string {
@@ -22,6 +22,7 @@ export function formatRelativeTime(isoString: string): string {
   return `${days}d ago`;
 }
 
+// High-contrast (>= 4.5:1 WCAG AA) status colors paired with explicit text labels and icons
 export const STATUS_META: Record<
   StockStatus,
   {
@@ -36,41 +37,41 @@ export const STATUS_META: Record<
   critical: {
     label: 'Critical Stock',
     shortLabel: 'Critical',
-    bg: 'bg-[#C65353]/10',
-    text: 'text-[#A33B3B]',
-    border: 'border-[#C65353]/25',
+    bg: 'bg-[#C65353]/12',
+    text: 'text-[#8C2D2D]',
+    border: 'border-[#C65353]/35',
     dot: 'bg-[#C65353]',
   },
   low: {
     label: 'Low Stock',
     shortLabel: 'Low Stock',
-    bg: 'bg-[#D99A32]/12',
-    text: 'text-[#9A6712]',
-    border: 'border-[#D99A32]/30',
+    bg: 'bg-[#D99A32]/14',
+    text: 'text-[#7A4E08]',
+    border: 'border-[#D99A32]/40',
     dot: 'bg-[#D99A32]',
   },
   reorder: {
     label: 'Reorder Soon',
     shortLabel: 'Reorder',
-    bg: 'bg-[#E6A23C]/12',
-    text: 'text-[#8F5B0B]',
-    border: 'border-[#E6A23C]/35',
+    bg: 'bg-[#E6A23C]/16',
+    text: 'text-[#754A06]',
+    border: 'border-[#E6A23C]/45',
     dot: 'bg-[#E6A23C]',
   },
   normal: {
     label: 'Optimal Stock',
     shortLabel: 'Normal',
-    bg: 'bg-[#38865B]/10',
-    text: 'text-[#246642]',
-    border: 'border-[#38865B]/25',
+    bg: 'bg-[#38865B]/12',
+    text: 'text-[#1B5736]',
+    border: 'border-[#38865B]/35',
     dot: 'bg-[#38865B]',
   },
   overstock: {
     label: 'Excess Stock',
     shortLabel: 'Overstock',
-    bg: 'bg-[#527A9B]/10',
-    text: 'text-[#395D7A]',
-    border: 'border-[#527A9B]/25',
+    bg: 'bg-[#527A9B]/12',
+    text: 'text-[#2A4A63]',
+    border: 'border-[#527A9B]/35',
     dot: 'bg-[#527A9B]',
   },
 };

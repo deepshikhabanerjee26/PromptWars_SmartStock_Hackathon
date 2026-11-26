@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Table2 } from 'lucide-react';
 import type { ForecastTimelinePoint } from '../../../shared/types';
 import { formatNumber } from '../../lib/formatters';
 
@@ -12,10 +13,28 @@ interface DemandForecastChartProps {
 export function DemandForecastChart({
   timeline,
   height = 280,
-  title = 'Historical vs. Predicted Demand',
-  subtitle = 'Actual monthly sales units contrasted with seasonal forecast and 90% uncertainty interval',
+  title = 'Historical Sales vs. Demand Forecast',
+  subtitle = 'Actual monthly sales units contrasted with Best, Expected, and Worst-Case forecast bounds (90% confidence interval)',
 }: DemandForecastChartProps) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [showTable, setShowTable] = useState(false);
+
+  const forecastTotals = useMemo(() => {
+    const forecastPoints = timeline.filter((t) => t.kind === 'forecast');
+    const worstCase = forecastPoints.reduce((s, p) => s + (p.lowerBound ?? 0), 0);
+    const expected = forecastPoints.reduce((s, p) => s + (p.predictedUnits ?? 0), 0);
+    const bestCase = forecastPoints.reduce((s, p) => s + (p.upperBound ?? 0), 0);
+    const latestActual =
+      timeline.filter((t) => t.kind === 'actual').slice(-1)[0]?.actualUnits ?? 0;
+
+    return {
+      worstCase,
+      expected,
+      bestCase,
+      latestActual,
+      monthsCount: forecastPoints.length,
+    };
+  }, [timeline]);
 
   const chart = useMemo(() => {
     const width = 760;
@@ -45,7 +64,6 @@ export function DemandForecastChart({
     const yFor = (val: number) =>
       padTop + innerH - ((val - minY) / Math.max(1, maxY - minY)) * innerH;
 
-    // Actual polyline & area
     const actualPoints: Array<{ x: number; y: number; i: number }> = [];
     const forecastPoints: Array<{ x: number; y: number; i: number }> = [];
     const upperPoints: Array<{ x: number; y: number }> = [];
@@ -119,33 +137,73 @@ export function DemandForecastChart({
 
   return (
     <div className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl p-5 flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="text-base font-semibold text-[#292F2C]">{title}</h3>
-          <p className="text-xs text-[#6B746E] mt-0.5">{subtitle}</p>
+          <p className="text-xs text-[#525A54] mt-0.5">{subtitle}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-[#6B746E] shrink-0">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-[#525A54] shrink-0">
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-[#145A43] inline-block rounded" />
+            <span className="w-3 h-0.5 bg-[#145A43] inline-block rounded" aria-hidden="true" />
             Actual Sales
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-3 h-0.5 border-t-2 border-dashed border-[#E6A23C] inline-block" />
-            AI Forecast
+            <span className="w-3 h-0.5 border-t-2 border-dashed border-[#D99A32] inline-block" aria-hidden="true" />
+            Expected Forecast
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-3 h-2.5 bg-[#E6A23C]/20 border border-[#E6A23C]/40 inline-block rounded-xs" />
-            90% Uncertainty Band
+            <span className="w-3 h-2.5 bg-[#E6A23C]/20 border border-[#D99A32]/50 inline-block rounded-xs" aria-hidden="true" />
+            Worst–Best Range
           </span>
+          <button
+            type="button"
+            onClick={() => setShowTable((prev) => !prev)}
+            aria-expanded={showTable}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#E4DFD4] bg-[#F5F1E8] hover:bg-[#EEEAE0] text-xs font-semibold text-[#292F2C] transition-colors"
+          >
+            <Table2 className="w-3.5 h-3.5 text-[#145A43]" aria-hidden="true" />
+            {showTable ? 'Hide Table' : 'Data Table'}
+          </button>
         </div>
       </div>
+
+      {/* Explicit Uncertainty Strip: Worst-Case, Expected, and Best-Case */}
+      <div className="grid grid-cols-3 gap-2.5 mb-4 p-3 rounded-lg bg-[#F5F1E8] border border-[#E4DFD4] text-xs">
+        <div>
+          <div className="text-[#58605A] font-medium">Worst-Case (Low 90%)</div>
+          <div className="font-mono-num text-sm font-bold text-[#292F2C] mt-0.5">
+            {formatNumber(forecastTotals.worstCase)} units
+          </div>
+        </div>
+        <div>
+          <div className="text-[#58605A] font-medium">Expected Demand</div>
+          <div className="font-mono-num text-sm font-bold text-[#145A43] mt-0.5">
+            {formatNumber(forecastTotals.expected)} units
+          </div>
+        </div>
+        <div>
+          <div className="text-[#58605A] font-medium">Best-Case (High 90%)</div>
+          <div className="font-mono-num text-sm font-bold text-[#7A4E08] mt-0.5">
+            {formatNumber(forecastTotals.bestCase)} units
+          </div>
+        </div>
+      </div>
+
+      {/* Concise Text Summary for Screen Readers & Quick Scanning */}
+      <p className="sr-only">
+        Chart summary: Latest monthly actual sales reached {formatNumber(forecastTotals.latestActual)} units.
+        Over the upcoming {forecastTotals.monthsCount}-month forecast horizon, expected demand is{' '}
+        {formatNumber(forecastTotals.expected)} units, ranging from a worst-case of{' '}
+        {formatNumber(forecastTotals.worstCase)} units to a best-case of{' '}
+        {formatNumber(forecastTotals.bestCase)} units at 90% confidence.
+      </p>
 
       <div className="relative w-full">
         <svg
           viewBox={`0 0 ${chart.width} ${chart.height}`}
           className="w-full h-auto overflow-visible select-none"
           role="img"
-          aria-label={title}
+          aria-label={`${title}. Expected demand is ${formatNumber(forecastTotals.expected)} units, with 90% confidence from ${formatNumber(forecastTotals.worstCase)} to ${formatNumber(forecastTotals.bestCase)} units.`}
         >
           <defs>
             <linearGradient id="emeraldAreaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -154,7 +212,6 @@ export function DemandForecastChart({
             </linearGradient>
           </defs>
 
-          {/* Horizontal Gridlines & Y Labels */}
           {chart.yTicks.map((tick) => (
             <g key={tick.value}>
               <line
@@ -169,33 +226,30 @@ export function DemandForecastChart({
                 x={chart.padLeft - 8}
                 y={tick.y + 4}
                 textAnchor="end"
-                className="fill-[#929A94] text-[10px] font-mono-num"
+                className="fill-[#58605A] text-[10px] font-mono-num"
               >
                 {tick.value >= 1000 ? `${(tick.value / 1000).toFixed(1)}k` : tick.value}
               </text>
             </g>
           ))}
 
-          {/* Forecast Split Vertical Marker */}
           {chart.actualPoints.length > 0 && (
             <line
               x1={chart.actualPoints[chart.actualPoints.length - 1].x}
               y1={chart.padTop}
               x2={chart.actualPoints[chart.actualPoints.length - 1].x}
               y2={chart.padTop + chart.innerH}
-              stroke="#D99A32"
+              stroke="#7A4E08"
               strokeWidth="1"
               strokeDasharray="3 3"
               opacity="0.55"
             />
           )}
 
-          {/* Uncertainty Confidence Band */}
           {chart.bandPath && (
-            <path d={chart.bandPath} fill="#E6A23C" fillOpacity="0.16" />
+            <path d={chart.bandPath} fill="#E6A23C" fillOpacity="0.18" />
           )}
 
-          {/* Actual Area & Line */}
           {chart.actualAreaPath && (
             <path d={chart.actualAreaPath} fill="url(#emeraldAreaGrad)" />
           )}
@@ -210,12 +264,11 @@ export function DemandForecastChart({
             />
           )}
 
-          {/* Forecast Dashed Line */}
           {chart.forecastLinePath && (
             <path
               d={chart.forecastLinePath}
               fill="none"
-              stroke="#E6A23C"
+              stroke="#D99A32"
               strokeWidth="2.5"
               strokeDasharray="6 4"
               strokeLinecap="round"
@@ -223,7 +276,6 @@ export function DemandForecastChart({
             />
           )}
 
-          {/* Data Nodes */}
           {chart.actualPoints.map((pt) => (
             <circle
               key={`a-${pt.i}`}
@@ -242,13 +294,12 @@ export function DemandForecastChart({
               cx={pt.x}
               cy={pt.y}
               r={hoverIdx === pt.i ? 4.5 : 3}
-              fill="#E6A23C"
+              fill="#D99A32"
               stroke="#FFFEFA"
               strokeWidth="1.5"
             />
           ))}
 
-          {/* X-axis Labels */}
           {timeline.map((pt, i) => {
             const showLabel = timeline.length <= 10 || i % 2 === 0 || i === timeline.length - 1;
             if (!showLabel) return null;
@@ -259,7 +310,7 @@ export function DemandForecastChart({
                 y={chart.padTop + chart.innerH + 20}
                 textAnchor="middle"
                 className={`text-[10px] ${
-                  pt.kind === 'forecast' ? 'fill-[#9A6712] font-semibold' : 'fill-[#6B746E]'
+                  pt.kind === 'forecast' ? 'fill-[#7A4E08] font-semibold' : 'fill-[#525A54]'
                 }`}
               >
                 {pt.label}
@@ -267,7 +318,6 @@ export function DemandForecastChart({
             );
           })}
 
-          {/* Hover Vertical Crosshair */}
           {hoverIdx !== null && (
             <line
               x1={activeX}
@@ -280,7 +330,6 @@ export function DemandForecastChart({
             />
           )}
 
-          {/* Interactive Hit Regions */}
           {timeline.map((pt, i) => {
             const x = chart.xFor(i);
             const colW =
@@ -303,18 +352,17 @@ export function DemandForecastChart({
           })}
         </svg>
 
-        {/* Interactive Tooltip */}
         {activePoint && hoverIdx !== null && (
           <div
             className="pointer-events-none absolute top-2 z-10 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA]/95 px-3 py-2 shadow-md text-xs"
             style={{
-              left: `${Math.min(72, Math.max(8, (activeX / chart.width) * 100))}%`,
+              left: `${Math.min(70, Math.max(6, (activeX / chart.width) * 100))}%`,
             }}
           >
             <div className="font-semibold text-[#292F2C] mb-1">
               {activePoint.label}{' '}
-              <span className="text-[11px] font-normal text-[#6B746E]">
-                ({activePoint.kind === 'forecast' ? 'Predicted' : 'Historical'})
+              <span className="text-[11px] font-normal text-[#525A54]">
+                ({activePoint.kind === 'forecast' ? 'Forecast' : 'Historical'})
               </span>
             </div>
             {activePoint.actualUnits !== null && (
@@ -325,23 +373,74 @@ export function DemandForecastChart({
             )}
             {activePoint.predictedUnits !== null && activePoint.kind === 'forecast' && (
               <>
-                <div className="flex items-center justify-between gap-4 text-[#9A6712] font-mono-num">
-                  <span>Predicted:</span>
+                <div className="flex items-center justify-between gap-4 text-[#7A4E08] font-mono-num">
+                  <span>Expected:</span>
                   <span className="font-semibold">{formatNumber(activePoint.predictedUnits)} units</span>
                 </div>
                 {activePoint.lowerBound !== null && activePoint.upperBound !== null && (
-                  <div className="flex items-center justify-between gap-4 text-[#6B746E] font-mono-num mt-0.5">
-                    <span>90% Range:</span>
-                    <span>
-                      {formatNumber(activePoint.lowerBound)} – {formatNumber(activePoint.upperBound)}
-                    </span>
-                  </div>
+                  <>
+                    <div className="flex items-center justify-between gap-4 text-[#525A54] font-mono-num mt-0.5">
+                      <span>Worst-Case:</span>
+                      <span>{formatNumber(activePoint.lowerBound)} units</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 text-[#525A54] font-mono-num">
+                      <span>Best-Case:</span>
+                      <span>{formatNumber(activePoint.upperBound)} units</span>
+                    </div>
+                  </>
                 )}
               </>
             )}
           </div>
         )}
       </div>
+
+      {/* Accessible Data Table Alternative */}
+      {showTable && (
+        <div className="mt-4 pt-4 border-t border-[#E4DFD4] overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs min-w-[480px]">
+            <caption className="sr-only">{title} tabular data</caption>
+            <thead>
+              <tr className="border-b border-[#E4DFD4] text-[#525A54] font-semibold">
+                <th scope="col" className="py-2 pr-3">Month</th>
+                <th scope="col" className="py-2 px-3">Type</th>
+                <th scope="col" className="py-2 px-3 text-right">Actual Sales</th>
+                <th scope="col" className="py-2 px-3 text-right">Worst-Case</th>
+                <th scope="col" className="py-2 px-3 text-right">Expected</th>
+                <th scope="col" className="py-2 pl-3 text-right">Best-Case</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E4DFD4] font-mono-num">
+              {timeline.map((row) => (
+                <tr key={row.label}>
+                  <th scope="row" className="py-1.5 pr-3 font-sans font-medium text-[#292F2C]">
+                    {row.label}
+                  </th>
+                  <td className="py-1.5 px-3 font-sans text-[#525A54] capitalize">{row.kind}</td>
+                  <td className="py-1.5 px-3 text-right">
+                    {row.actualUnits !== null ? formatNumber(row.actualUnits) : '—'}
+                  </td>
+                  <td className="py-1.5 px-3 text-right">
+                    {row.kind === 'forecast' && row.lowerBound !== null
+                      ? formatNumber(row.lowerBound)
+                      : '—'}
+                  </td>
+                  <td className="py-1.5 px-3 text-right font-semibold text-[#145A43]">
+                    {row.kind === 'forecast' && row.predictedUnits !== null
+                      ? formatNumber(row.predictedUnits)
+                      : '—'}
+                  </td>
+                  <td className="py-1.5 pl-3 text-right">
+                    {row.kind === 'forecast' && row.upperBound !== null
+                      ? formatNumber(row.upperBound)
+                      : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

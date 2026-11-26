@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -10,33 +10,132 @@ import {
   type ForecastHorizon,
   type InventoryCategory,
   type Product,
-  type ProductUnit,
-  type ScenarioInput,
 } from './shared/types.ts';
-import { buildForecastReport, computeProductForecast, getRecentMonthLabels } from './server/forecastEngine.ts';
+import {
+  buildForecastReport,
+  computeProductForecast,
+  getRecentMonthLabels,
+} from './server/forecastEngine.ts';
 import { CATEGORY_IMAGES } from './server/seedData.ts';
 import { addActivity, loadStore, persistStore } from './server/store.ts';
+import {
+  escapeDisplayText,
+  isValidCategory,
+  validateMovementInput,
+  validateProductInput,
+  validateScenarioInput,
+} from './src/lib/validation.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Trust reverse proxy headers (Render / Cloud Run) for accurate client IP & protocol checks
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
 app.use(express.json({ limit: '4mb' }));
 
-// Security headers for production hardening
-app.use((_req, res, next) => {
+// Security headers (helmet-equivalent) applied to every HTTP response
+app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-DNS-Prefetch-Control', 'off');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: https: http:",
+      "connect-src 'self' ws: wss:",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join('; ')
+  );
+  if (isProduction) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   next();
 });
 
-function isValidCategory(val: unknown): val is InventoryCategory {
-  return typeof val === 'string' && (INVENTORY_CATEGORIES as readonly string[]).includes(val);
+// Strict same-origin / APP_URL CORS policy for /api/* routes
+function isAllowedOrigin(req: Request, origin: string): boolean {
+  try {
+    const parsedOrigin = new URL(origin);
+    const hostHeader = req.get('x-forwarded-host') || req.get('host');
+    if (hostHeader && parsedOrigin.host === hostHeader) {
+      return true;
+    }
+    const configuredAppUrl = process.env.APP_URL?.trim();
+    if (configuredAppUrl) {
+      const parsedAppUrl = new URL(configuredAppUrl);
+      if (parsedOrigin.origin === parsedAppUrl.origin) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
-function isValidUnit(val: unknown): val is ProductUnit {
-  return typeof val === 'string' && (PRODUCT_UNITS as readonly string[]).includes(val);
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  const origin = req.get('origin');
+  if (origin) {
+    if (!isAllowedOrigin(req, origin)) {
+      res.status(403).json({ error: 'Cross-origin API access is not permitted.' });
+      return;
+    }
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
+
+// Sliding-window in-memory rate limiter for API routes
+function createRateLimiter(maxRequests: number, windowMs: number) {
+  const hits = new Map<string, number[]>();
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const recent = (hits.get(key) ?? []).filter((ts) => now - ts < windowMs);
+
+    if (recent.length >= maxRequests) {
+      res.setHeader('Retry-After', String(Math.ceil(windowMs / 1000)));
+      res.status(429).json({
+        error: 'Too many requests in a short period. Please wait a moment and try again.',
+      });
+      return;
+    }
+
+    recent.push(now);
+    hits.set(key, recent);
+
+    // Opportunistic cleanup so memory stays bounded
+    if (hits.size > 2000) {
+      for (const [ip, timestamps] of hits.entries()) {
+        if (timestamps.every((ts) => now - ts >= windowMs)) {
+          hits.delete(ip);
+        }
+      }
+    }
+    next();
+  };
 }
+
+const apiLimiter = createRateLimiter(120, 60_000);
+const aiLimiter = createRateLimiter(12, 60_000);
+app.use('/api', apiLimiter);
 
 function sanitizeImageUrl(raw: unknown, category: InventoryCategory): string {
   if (typeof raw !== 'string' || !raw.trim()) {
@@ -70,12 +169,10 @@ function generateSku(category: InventoryCategory, existingCount: number): string
   return `${prefix}-${num}`;
 }
 
-// Health check endpoint (useful for Render zero-downtime checks)
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'SmartStock', timestamp: new Date().toISOString() });
 });
 
-// Get full inventory catalog, live forecast classifications, and recent activities
 app.get('/api/products', (_req, res) => {
   try {
     const store = loadStore();
@@ -90,86 +187,48 @@ app.get('/api/products', (_req, res) => {
       categories: INVENTORY_CATEGORIES,
       units: PRODUCT_UNITS,
     });
-  } catch (err) {
-    console.error('GET /api/products failed:', err);
-    res.status(500).json({ error: 'Unable to load inventory data.' });
+  } catch {
+    res.status(500).json({ error: 'Unable to load inventory data right now.' });
   }
 });
 
-// Create a new inventory product
 app.post('/api/products', (req, res) => {
   try {
-    const body = req.body ?? {};
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const supplier = typeof body.supplier === 'string' ? body.supplier.trim() : 'Local Wholesale Supplier';
-    const seasonalityTag =
-      typeof body.seasonalityTag === 'string' && body.seasonalityTag.trim()
-        ? body.seasonalityTag.trim()
-        : 'Steady Year-Round';
-
-    if (!name || name.length < 2 || name.length > 100) {
-      res.status(400).json({ error: 'Product name must be between 2 and 100 characters.' });
-      return;
-    }
-    if (!isValidCategory(body.category)) {
-      res.status(400).json({ error: 'Please select a valid inventory category.' });
-      return;
-    }
-    if (!isValidUnit(body.unit)) {
-      res.status(400).json({ error: 'Please select a valid unit of measurement.' });
-      return;
-    }
-
-    const quantity = Number(body.quantity);
-    const purchasePrice = Number(body.purchasePrice);
-    const sellingPrice = Number(body.sellingPrice);
-    const reorderLevel = Number(body.reorderLevel);
-    const maxStockLevel = Number(body.maxStockLevel ?? Math.max(50, reorderLevel * 3));
-    const leadTimeDays = Number(body.leadTimeDays ?? 3);
-
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      res.status(400).json({ error: 'Quantity must be a non-negative number.' });
-      return;
-    }
-    if (!Number.isFinite(purchasePrice) || purchasePrice <= 0 || !Number.isFinite(sellingPrice) || sellingPrice <= 0) {
-      res.status(400).json({ error: 'Purchase price and selling price must be greater than zero.' });
-      return;
-    }
-    if (!Number.isFinite(reorderLevel) || reorderLevel < 0 || !Number.isFinite(leadTimeDays) || leadTimeDays < 1) {
-      res.status(400).json({ error: 'Reorder level must be >= 0 and lead time >= 1 day.' });
+    const validated = validateProductInput((req.body ?? {}) as Record<string, unknown>);
+    if (!validated.ok) {
+      res.status(400).json({ error: validated.error });
       return;
     }
 
     const store = loadStore();
-    const rawSku = typeof body.sku === 'string' ? body.sku.trim().toUpperCase() : '';
-    const sku = rawSku || generateSku(body.category, store.products.length + 1);
+    const sku = validated.data.sku || generateSku(validated.data.category, store.products.length + 1);
 
     if (store.products.some((p) => p.sku.toLowerCase() === sku.toLowerCase())) {
       res.status(409).json({ error: `SKU "${sku}" already exists in inventory.` });
       return;
     }
 
-    const baselineMonthly = Math.max(12, Math.round(reorderLevel * 2.2));
+    const baselineMonthly = Math.max(12, Math.round(validated.data.reorderLevel * 2.2));
     const monthlySales = Array.from({ length: 12 }, (_, idx) =>
-      Math.max(4, Math.round(baselineMonthly * (0.9 + ((idx % 4) * 0.06))))
+      Math.max(4, Math.round(baselineMonthly * (0.9 + (idx % 4) * 0.06)))
     );
     const monthlyRestocks = monthlySales.map((s) => Math.max(4, Math.round(s * 1.02)));
 
     const newProduct: Product = {
       id: `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       sku,
-      name,
-      category: body.category,
-      quantity: Math.round(quantity),
-      unit: body.unit,
-      purchasePrice: Number(purchasePrice.toFixed(2)),
-      sellingPrice: Number(sellingPrice.toFixed(2)),
-      reorderLevel: Math.round(reorderLevel),
-      maxStockLevel: Math.max(Math.round(reorderLevel) + 10, Math.round(maxStockLevel)),
-      leadTimeDays: Math.min(60, Math.max(1, Math.round(leadTimeDays))),
-      supplier: supplier.slice(0, 80),
-      seasonalityTag: seasonalityTag.slice(0, 60),
-      imageUrl: sanitizeImageUrl(body.imageUrl, body.category),
+      name: validated.data.name,
+      category: validated.data.category,
+      quantity: validated.data.quantity,
+      unit: validated.data.unit,
+      purchasePrice: validated.data.purchasePrice,
+      sellingPrice: validated.data.sellingPrice,
+      reorderLevel: validated.data.reorderLevel,
+      maxStockLevel: validated.data.maxStockLevel,
+      leadTimeDays: validated.data.leadTimeDays,
+      supplier: validated.data.supplier,
+      seasonalityTag: validated.data.seasonalityTag,
+      imageUrl: sanitizeImageUrl(validated.data.imageUrl, validated.data.category),
       monthlySales,
       monthlyRestocks,
       updatedAt: new Date().toISOString(),
@@ -194,13 +253,11 @@ app.post('/api/products', (req, res) => {
         forecast: computeProductForecast(newProduct, 30, monthLabels),
       },
     });
-  } catch (err) {
-    console.error('POST /api/products failed:', err);
-    res.status(500).json({ error: 'Failed to create product.' });
+  } catch {
+    res.status(500).json({ error: 'Unable to save the new product. Please check your entries.' });
   }
 });
 
-// Update an existing product
 app.put('/api/products/:id', (req, res) => {
   try {
     const store = loadStore();
@@ -211,47 +268,30 @@ app.put('/api/products/:id', (req, res) => {
     }
 
     const existing = store.products[idx];
-    const body = req.body ?? {};
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const merged = {
+      name: body.name ?? existing.name,
+      sku: body.sku ?? existing.sku,
+      category: body.category ?? existing.category,
+      unit: body.unit ?? existing.unit,
+      quantity: body.quantity ?? existing.quantity,
+      purchasePrice: body.purchasePrice ?? existing.purchasePrice,
+      sellingPrice: body.sellingPrice ?? existing.sellingPrice,
+      reorderLevel: body.reorderLevel ?? existing.reorderLevel,
+      maxStockLevel: body.maxStockLevel ?? existing.maxStockLevel,
+      leadTimeDays: body.leadTimeDays ?? existing.leadTimeDays,
+      supplier: body.supplier ?? existing.supplier,
+      seasonalityTag: body.seasonalityTag ?? existing.seasonalityTag,
+      imageUrl: body.imageUrl ?? existing.imageUrl,
+    };
 
-    const name = typeof body.name === 'string' ? body.name.trim() : existing.name;
-    if (!name || name.length < 2 || name.length > 100) {
-      res.status(400).json({ error: 'Product name must be between 2 and 100 characters.' });
+    const validated = validateProductInput(merged);
+    if (!validated.ok) {
+      res.status(400).json({ error: validated.error });
       return;
     }
 
-    const category = body.category !== undefined ? body.category : existing.category;
-    if (!isValidCategory(category)) {
-      res.status(400).json({ error: 'Invalid inventory category.' });
-      return;
-    }
-
-    const unit = body.unit !== undefined ? body.unit : existing.unit;
-    if (!isValidUnit(unit)) {
-      res.status(400).json({ error: 'Invalid unit of measurement.' });
-      return;
-    }
-
-    const quantity = body.quantity !== undefined ? Number(body.quantity) : existing.quantity;
-    const purchasePrice = body.purchasePrice !== undefined ? Number(body.purchasePrice) : existing.purchasePrice;
-    const sellingPrice = body.sellingPrice !== undefined ? Number(body.sellingPrice) : existing.sellingPrice;
-    const reorderLevel = body.reorderLevel !== undefined ? Number(body.reorderLevel) : existing.reorderLevel;
-    const maxStockLevel = body.maxStockLevel !== undefined ? Number(body.maxStockLevel) : existing.maxStockLevel;
-    const leadTimeDays = body.leadTimeDays !== undefined ? Number(body.leadTimeDays) : existing.leadTimeDays;
-
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      res.status(400).json({ error: 'Quantity must be a non-negative number.' });
-      return;
-    }
-    if (!Number.isFinite(purchasePrice) || purchasePrice <= 0 || !Number.isFinite(sellingPrice) || sellingPrice <= 0) {
-      res.status(400).json({ error: 'Prices must be greater than zero.' });
-      return;
-    }
-
-    const sku =
-      typeof body.sku === 'string' && body.sku.trim()
-        ? body.sku.trim().toUpperCase()
-        : existing.sku;
-
+    const sku = validated.data.sku || existing.sku;
     if (store.products.some((p, i) => i !== idx && p.sku.toLowerCase() === sku.toLowerCase())) {
       res.status(409).json({ error: `SKU "${sku}" is already used by another product.` });
       return;
@@ -260,28 +300,23 @@ app.put('/api/products/:id', (req, res) => {
     const updated: Product = {
       ...existing,
       sku,
-      name,
-      category,
-      unit,
-      quantity: Math.round(quantity),
-      purchasePrice: Number(purchasePrice.toFixed(2)),
-      sellingPrice: Number(sellingPrice.toFixed(2)),
-      reorderLevel: Math.max(0, Math.round(reorderLevel)),
-      maxStockLevel: Math.max(Math.round(reorderLevel) + 10, Math.round(maxStockLevel)),
-      leadTimeDays: Math.min(60, Math.max(1, Math.round(leadTimeDays))),
-      supplier:
-        typeof body.supplier === 'string' && body.supplier.trim()
-          ? body.supplier.trim().slice(0, 80)
-          : existing.supplier,
-      seasonalityTag:
-        typeof body.seasonalityTag === 'string' && body.seasonalityTag.trim()
-          ? body.seasonalityTag.trim().slice(0, 60)
-          : existing.seasonalityTag,
+      name: validated.data.name,
+      category: validated.data.category,
+      unit: validated.data.unit,
+      quantity: validated.data.quantity,
+      purchasePrice: validated.data.purchasePrice,
+      sellingPrice: validated.data.sellingPrice,
+      reorderLevel: validated.data.reorderLevel,
+      maxStockLevel: validated.data.maxStockLevel,
+      leadTimeDays: validated.data.leadTimeDays,
+      supplier: validated.data.supplier,
+      seasonalityTag: validated.data.seasonalityTag,
       imageUrl:
         body.imageUrl !== undefined
-          ? sanitizeImageUrl(body.imageUrl, category)
-          : category !== existing.category && existing.imageUrl === CATEGORY_IMAGES[existing.category]
-            ? CATEGORY_IMAGES[category]
+          ? sanitizeImageUrl(body.imageUrl, validated.data.category)
+          : validated.data.category !== existing.category &&
+              existing.imageUrl === CATEGORY_IMAGES[existing.category]
+            ? CATEGORY_IMAGES[validated.data.category]
             : existing.imageUrl,
       updatedAt: new Date().toISOString(),
     };
@@ -305,13 +340,11 @@ app.put('/api/products/:id', (req, res) => {
         forecast: computeProductForecast(updated, 30, monthLabels),
       },
     });
-  } catch (err) {
-    console.error('PUT /api/products/:id failed:', err);
-    res.status(500).json({ error: 'Failed to update product.' });
+  } catch {
+    res.status(500).json({ error: 'Unable to update product details.' });
   }
 });
 
-// Record stock movement (restock purchase, sale outbound, or physical count adjustment)
 app.post('/api/products/:id/movement', (req, res) => {
   try {
     const store = loadStore();
@@ -321,22 +354,14 @@ app.post('/api/products/:id/movement', (req, res) => {
       return;
     }
 
-    const body = req.body ?? {};
-    const type = body.type;
-    const amount = Number(body.quantity);
-    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 140) : '';
-
-    if (type !== 'restock' && type !== 'sale' && type !== 'adjustment') {
-      res.status(400).json({ error: 'Movement type must be restock, sale, or adjustment.' });
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      res.status(400).json({ error: 'Movement quantity must be greater than zero.' });
-      return;
-    }
-
     const product = store.products[idx];
-    const rounded = Math.round(amount);
+    const validated = validateMovementInput((req.body ?? {}) as Record<string, unknown>, product.quantity);
+    if (!validated.ok) {
+      res.status(400).json({ error: validated.error });
+      return;
+    }
+
+    const { type, quantity: rounded, note } = validated.data;
     let nextQuantity = product.quantity;
     let delta = 0;
 
@@ -344,22 +369,12 @@ app.post('/api/products/:id/movement', (req, res) => {
       nextQuantity = product.quantity + rounded;
       delta = rounded;
       const lastIdx = product.monthlyRestocks.length - 1;
-      if (lastIdx >= 0) {
-        product.monthlyRestocks[lastIdx] += rounded;
-      }
+      if (lastIdx >= 0) product.monthlyRestocks[lastIdx] += rounded;
     } else if (type === 'sale') {
-      if (rounded > product.quantity) {
-        res.status(400).json({
-          error: `Insufficient stock: only ${product.quantity} ${product.unit} available to sell.`,
-        });
-        return;
-      }
       nextQuantity = product.quantity - rounded;
       delta = -rounded;
       const lastIdx = product.monthlySales.length - 1;
-      if (lastIdx >= 0) {
-        product.monthlySales[lastIdx] += rounded;
-      }
+      if (lastIdx >= 0) product.monthlySales[lastIdx] += rounded;
     } else {
       delta = rounded - product.quantity;
       nextQuantity = rounded;
@@ -397,13 +412,11 @@ app.post('/api/products/:id/movement', (req, res) => {
       },
       activities: store.activities,
     });
-  } catch (err) {
-    console.error('POST /api/products/:id/movement failed:', err);
-    res.status(500).json({ error: 'Failed to record stock movement.' });
+  } catch {
+    res.status(500).json({ error: 'Unable to record stock movement.' });
   }
 });
 
-// Delete a product
 app.delete('/api/products/:id', (req, res) => {
   try {
     const store = loadStore();
@@ -421,18 +434,16 @@ app.delete('/api/products/:id', (req, res) => {
       sku: removed.sku,
       quantityDelta: -removed.quantity,
       unit: removed.unit,
-      note: `Removed SKU from active catalog`,
+      note: 'Removed SKU from active catalog',
     });
     persistStore(store);
 
     res.json({ deletedId: removed.id });
-  } catch (err) {
-    console.error('DELETE /api/products/:id failed:', err);
-    res.status(500).json({ error: 'Failed to delete product.' });
+  } catch {
+    res.status(500).json({ error: 'Unable to delete product.' });
   }
 });
 
-// Deterministic demand forecasting & inventory optimization endpoint
 app.get('/api/forecast', (req, res) => {
   try {
     const rawHorizon = Number(req.query.horizon);
@@ -445,44 +456,27 @@ app.get('/api/forecast', (req, res) => {
     const store = loadStore();
     const report = buildForecastReport(store.products, horizon, selectedCategory);
     res.json(report);
-  } catch (err) {
-    console.error('GET /api/forecast failed:', err);
-    res.status(500).json({ error: 'Failed to compute demand forecast.' });
+  } catch {
+    res.status(500).json({ error: 'Unable to compute demand forecast.' });
   }
 });
 
-// Server-side Gemini AI scenario analysis & reasoning under uncertainty
-app.post('/api/ai/analyze', async (req, res) => {
+// Server-side Gemini AI scenario advisor (key read strictly from process.env)
+app.post('/api/ai/analyze', aiLimiter, async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     res.status(503).json({
       error:
-        'AI Scenario Advisor requires GEMINI_API_KEY in server environment secrets. Statistical forecasting and EOQ optimization remain active.',
+        'AI Scenario Advisor requires GEMINI_API_KEY in server environment secrets. Statistical forecasting and scenario stress-testing remain active.',
     });
     return;
   }
 
   try {
-    const body = (req.body ?? {}) as Partial<ScenarioInput>;
-    const scenarioName =
-      typeof body.scenarioName === 'string' && body.scenarioName.trim()
-        ? body.scenarioName.trim().slice(0, 80)
-        : 'Festive & Seasonal Demand Evaluation';
-    const demandMultiplierPct = Math.max(-50, Math.min(150, Number(body.demandMultiplierPct ?? 25)));
-    const leadTimeShockDays = Math.max(0, Math.min(30, Number(body.leadTimeShockDays ?? 3)));
-    const priceInflationPct = Math.max(-20, Math.min(60, Number(body.priceInflationPct ?? 5)));
-    const focusCategory =
-      typeof body.focusCategory === 'string' &&
-      (body.focusCategory === 'All' || isValidCategory(body.focusCategory))
-        ? body.focusCategory
-        : 'All';
-    const customNotes =
-      typeof body.customNotes === 'string' ? body.customNotes.trim().slice(0, 300) : '';
-
+    const scenario = validateScenarioInput((req.body ?? {}) as Record<string, unknown>);
     const store = loadStore();
-    const report = buildForecastReport(store.products, 30, focusCategory);
+    const report = buildForecastReport(store.products, 30, scenario.focusCategory);
 
-    // Select top 18 highest-risk / highest-demand items for compact grounded context
     const priorityItems = report.productForecasts.slice(0, 18).map((item) => ({
       sku: item.sku,
       name: item.name,
@@ -491,8 +485,9 @@ app.post('/api/ai/analyze', async (req, res) => {
       currentStock: item.currentStock,
       avgDailyDemand: item.avgDailyDemand,
       demandStdDev: item.demandStdDev,
-      predicted30dDemand: item.predictedDemand,
-      predictionInterval90: [item.lowerBound, item.upperBound],
+      worstCase30d: item.lowerBound,
+      expected30d: item.predictedDemand,
+      bestCase30d: item.upperBound,
       leadTimeDays: item.leadTimeDays,
       safetyStock: item.safetyStock,
       reorderPoint: item.reorderPoint,
@@ -513,28 +508,28 @@ app.post('/api/ai/analyze', async (req, res) => {
     });
 
     const prompt = [
-      `You are a senior supply-chain & retail inventory strategist for an Indian grocery and consumer staples business using SmartStock.`,
-      `Analyze the live inventory and statistical forecast data below under the requested stress scenario, reasoning explicitly under demand and supply uncertainty.`,
-      ``,
-      `SCENARIO PARAMETERS:`,
-      `- Scenario Name: ${scenarioName}`,
-      `- Category Scope: ${focusCategory}`,
-      `- Demand Shock: ${demandMultiplierPct >= 0 ? '+' : ''}${demandMultiplierPct}%`,
-      `- Supplier Lead-Time Delay: +${leadTimeShockDays} days`,
-      `- Supplier Cost Inflation: ${priceInflationPct >= 0 ? '+' : ''}${priceInflationPct}%`,
-      customNotes ? `- Manager Context: ${customNotes}` : '',
-      ``,
-      `AGGREGATE STORE SNAPSHOT (${focusCategory}):`,
+      'You are a senior supply-chain & retail inventory strategist for an Indian grocery and consumer staples business using SmartStock.',
+      'Analyze the live inventory and statistical forecast data below under the requested stress scenario, reasoning explicitly under demand and supply uncertainty.',
+      '',
+      'SCENARIO PARAMETERS:',
+      `- Scenario Name: ${scenario.scenarioName}`,
+      `- Category Scope: ${scenario.focusCategory}`,
+      `- Demand Shock: ${scenario.demandMultiplierPct >= 0 ? '+' : ''}${scenario.demandMultiplierPct}%`,
+      `- Supplier Lead-Time Delay: +${scenario.leadTimeShockDays} days`,
+      `- Supplier Cost Inflation: ${scenario.priceInflationPct >= 0 ? '+' : ''}${scenario.priceInflationPct}%`,
+      scenario.customNotes ? `- Manager Context: ${scenario.customNotes}` : '',
+      '',
+      `AGGREGATE STORE SNAPSHOT (${scenario.focusCategory}):`,
       JSON.stringify(report.summary),
-      ``,
-      `HIGHEST-PRIORITY SKUs (with 90% prediction intervals & stockout risk):`,
+      '',
+      'HIGHEST-PRIORITY SKUs (with worst/expected/best 90% prediction intervals):',
       JSON.stringify(priorityItems),
-      ``,
-      `INSTRUCTIONS:`,
-      `1. Ground every SKU, unit, quantity, and INR cost strictly in the provided inventory snapshot.`,
-      `2. Explain how the demand variance (90% prediction interval) and +${leadTimeShockDays} day lead-time delay compound stockout probability.`,
-      `3. Provide 5 to 7 concrete purchasing actions prioritized by urgency ('immediate', 'this_week', 'monitor'), adjusting order quantities for the scenario shock.`,
-      `4. Include realistic cash requirement in INR and concise operational risk mitigation steps.`,
+      '',
+      'INSTRUCTIONS:',
+      '1. Ground every SKU, unit, quantity, and INR cost strictly in the provided inventory snapshot.',
+      `2. Explain how the worst-to-best demand spread and +${scenario.leadTimeShockDays} day lead-time delay compound stockout probability.`,
+      "3. Provide 5 to 7 concrete purchasing actions prioritized by urgency ('immediate', 'this_week', 'monitor'), adjusting order quantities for the scenario shock.",
+      '4. Include realistic cash requirement in INR and concise operational risk mitigation steps.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -544,7 +539,7 @@ app.post('/api/ai/analyze', async (req, res) => {
       contents: prompt,
       config: {
         systemInstruction:
-          'Return crisp, quantitative Indian retail supply chain recommendations in valid JSON matching the schema. Never invent SKUs outside the provided dataset.',
+          'Return crisp, quantitative Indian retail supply chain recommendations in valid plain-text JSON matching the schema. Never invent SKUs outside the provided dataset and never include HTML tags.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -598,46 +593,50 @@ app.post('/api/ai/analyze', async (req, res) => {
 
     const rawText = (response.text ?? '').trim();
     if (!rawText) {
-      res.status(502).json({ error: 'Gemini returned an empty response. Please try again.' });
+      res.status(502).json({ error: 'The AI service returned an empty response. Please try again.' });
       return;
     }
 
     const parsed = JSON.parse(rawText) as Omit<AIAnalysisResult, 'generatedAt' | 'model'>;
     const validUrgencies = new Set(['immediate', 'this_week', 'monitor']);
 
+    // Escape and sanitize all AI-generated fields before returning to the client
     const sanitizedResult: AIAnalysisResult = {
       generatedAt: new Date().toISOString(),
       model: 'gemini-4-hydrogen',
-      scenarioTitle: parsed.scenarioTitle || scenarioName,
-      executiveSummary: parsed.executiveSummary || '',
-      uncertaintyReasoning: parsed.uncertaintyReasoning || '',
-      projectedRevenueImpact: parsed.projectedRevenueImpact || '',
+      scenarioTitle: escapeDisplayText(parsed.scenarioTitle) || scenario.scenarioName,
+      executiveSummary: escapeDisplayText(parsed.executiveSummary),
+      uncertaintyReasoning: escapeDisplayText(parsed.uncertaintyReasoning),
+      projectedRevenueImpact: escapeDisplayText(parsed.projectedRevenueImpact),
       cashRequiredInr: Math.max(0, Math.round(Number(parsed.cashRequiredInr) || 0)),
       riskMitigationSteps: Array.isArray(parsed.riskMitigationSteps)
-        ? parsed.riskMitigationSteps.slice(0, 6).map(String)
+        ? parsed.riskMitigationSteps.slice(0, 6).map((s) => escapeDisplayText(s))
         : [],
       recommendedPurchases: Array.isArray(parsed.recommendedPurchases)
         ? parsed.recommendedPurchases.slice(0, 8).map((item) => ({
-            sku: String(item.sku || ''),
-            productName: String(item.productName || ''),
+            sku: escapeDisplayText(item.sku),
+            productName: escapeDisplayText(item.productName),
             urgency: validUrgencies.has(item.urgency) ? item.urgency : 'this_week',
             recommendedQty: Math.max(1, Math.round(Number(item.recommendedQty) || 1)),
-            unit: String(item.unit || 'units'),
+            unit: escapeDisplayText(item.unit || 'units'),
             estimatedCostInr: Math.max(0, Math.round(Number(item.estimatedCostInr) || 0)),
-            rationale: String(item.rationale || ''),
+            rationale: escapeDisplayText(item.rationale),
           }))
         : [],
     };
 
     res.json(sanitizedResult);
-  } catch (err: unknown) {
-    console.error('POST /api/ai/analyze failed:', err);
-    const message =
-      err instanceof Error ? err.message : 'Unable to reach Gemini AI service.';
+  } catch {
     res.status(502).json({
-      error: `AI scenario analysis failed: ${message}`,
+      error:
+        'Unable to reach the AI scenario service right now. Deterministic scenario estimates remain available above.',
     });
   }
+});
+
+// Friendly fallback error handler (never exposes raw stack traces)
+app.use((_err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  res.status(500).json({ error: 'An unexpected server error occurred. Please try again.' });
 });
 
 async function startServer() {
@@ -666,7 +665,9 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SmartStock server running on http://0.0.0.0:${PORT} (${isProduction ? 'production' : 'development'})`);
+    process.stdout.write(
+      `SmartStock server listening on http://0.0.0.0:${PORT} (${isProduction ? 'production' : 'development'})\n`
+    );
   });
 }
 

@@ -62,87 +62,90 @@ export function PriorityQueuePage({
 
   return (
     <div className="space-y-6 animate-fade-slide">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <section aria-labelledby="priority-heading" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#292F2C] tracking-tight">
+          <h1 id="priority-heading" className="text-2xl font-bold text-[#292F2C] tracking-tight">
             Purchasing Priority Queue
           </h1>
-          <p className="text-sm text-[#6B746E] mt-1">
-            Actionable replenishment queue ranked by stockout probability, lead time exposure, and EOQ batch size.
+          <p className="text-sm text-[#525A54] mt-1">
+            Actionable replenishment queue ranked by stockout probability, lead-time exposure, and EOQ batch size.
           </p>
         </div>
         <div className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl px-4 py-2.5 text-right shrink-0">
-          <div className="text-[11px] font-medium text-[#6B746E]">
+          <div className="text-[11px] font-medium text-[#525A54]">
             Queue Restock Budget
           </div>
           <div className="font-mono-num text-lg font-bold text-[#145A43]">
             {formatINR(queueCostTotal)}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Urgency Tier Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <section aria-label="Stock alert tier summary" className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <button
           type="button"
+          aria-pressed={statusGroup === 'critical'}
           onClick={() => setStatusGroup('critical')}
           className={`text-left p-4 rounded-xl border transition-colors ${
             statusGroup === 'critical'
-              ? 'bg-[#C65353]/10 border-[#C65353]'
+              ? 'bg-[#C65353]/12 border-[#C65353]'
               : 'bg-[#FFFEFA] border-[#E4DFD4] hover:border-[#C65353]/50'
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-[#A33B3B]">
+          <div className="flex items-center justify-between text-xs font-semibold text-[#8C2D2D]">
             <span>Critical Stock</span>
-            <AlertOctagon className="w-4 h-4" />
+            <AlertOctagon className="w-4 h-4" aria-hidden="true" />
           </div>
           <div className="font-mono-num text-2xl font-bold text-[#292F2C] mt-1.5">
             {summary.criticalCount}
           </div>
-          <div className="text-[11px] text-[#6B746E] mt-0.5">Below safety buffer</div>
+          <div className="text-[11px] text-[#525A54] mt-0.5">Below safety buffer</div>
         </button>
 
         <button
           type="button"
+          aria-pressed={statusGroup === 'low'}
           onClick={() => setStatusGroup('low')}
           className={`text-left p-4 rounded-xl border transition-colors ${
             statusGroup === 'low'
-              ? 'bg-[#D99A32]/14 border-[#D99A32]'
+              ? 'bg-[#D99A32]/16 border-[#D99A32]'
               : 'bg-[#FFFEFA] border-[#E4DFD4] hover:border-[#D99A32]/50'
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-[#9A6712]">
+          <div className="flex items-center justify-between text-xs font-semibold text-[#7A4E08]">
             <span>Low Stock</span>
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-4 h-4" aria-hidden="true" />
           </div>
           <div className="font-mono-num text-2xl font-bold text-[#292F2C] mt-1.5">
             {summary.lowCount}
           </div>
-          <div className="text-[11px] text-[#6B746E] mt-0.5">Within lead-time window</div>
+          <div className="text-[11px] text-[#525A54] mt-0.5">Within lead-time window</div>
         </button>
 
         <button
           type="button"
+          aria-pressed={statusGroup === 'reorder'}
           onClick={() => setStatusGroup('reorder')}
           className={`text-left p-4 rounded-xl border transition-colors ${
             statusGroup === 'reorder'
-              ? 'bg-[#E6A23C]/14 border-[#E6A23C]'
+              ? 'bg-[#E6A23C]/16 border-[#E6A23C]'
               : 'bg-[#FFFEFA] border-[#E4DFD4] hover:border-[#E6A23C]/50'
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-[#8F5B0B]">
+          <div className="flex items-center justify-between text-xs font-semibold text-[#754A06]">
             <span>Reorder Soon</span>
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4" aria-hidden="true" />
           </div>
           <div className="font-mono-num text-2xl font-bold text-[#292F2C] mt-1.5">
             {summary.reorderCount}
           </div>
-          <div className="text-[11px] text-[#6B746E] mt-0.5">At reorder point</div>
+          <div className="text-[11px] text-[#525A54] mt-0.5">At reorder point</div>
         </button>
 
         <button
           type="button"
+          aria-pressed={statusGroup === 'normal'}
           onClick={() => setStatusGroup('normal')}
           className={`text-left p-4 rounded-xl border transition-colors ${
             statusGroup === 'normal'
@@ -150,20 +153,20 @@ export function PriorityQueuePage({
               : 'bg-[#FFFEFA] border-[#E4DFD4] hover:border-[#38865B]/50'
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-semibold text-[#246642]">
+          <div className="flex items-center justify-between text-xs font-semibold text-[#1B5736]">
             <span>Normal Stock</span>
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
           </div>
           <div className="font-mono-num text-2xl font-bold text-[#292F2C] mt-1.5">
             {summary.normalCount}
           </div>
-          <div className="text-[11px] text-[#6B746E] mt-0.5">Healthy coverage</div>
+          <div className="text-[11px] text-[#525A54] mt-0.5">Healthy coverage</div>
         </button>
-      </div>
+      </section>
 
       {/* Filter Bar */}
-      <div className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <section aria-label="Priority queue filters" className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter queue status">
           {[
             { id: 'attention', label: 'Action Required' },
             { id: 'all', label: 'All SKUs' },
@@ -176,11 +179,12 @@ export function PriorityQueuePage({
             <button
               key={tab.id}
               type="button"
+              aria-pressed={statusGroup === tab.id}
               onClick={() => setStatusGroup(tab.id as typeof statusGroup)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 statusGroup === tab.id
                   ? 'bg-[#145A43] text-white'
-                  : 'bg-[#F5F1E8] text-[#6B746E] hover:bg-[#EEEAE0]'
+                  : 'bg-[#F5F1E8] text-[#525A54] hover:bg-[#EEEAE0]'
               }`}
             >
               {tab.label}
@@ -190,36 +194,47 @@ export function PriorityQueuePage({
 
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
           <div className="relative flex-1 sm:w-56">
-            <Search className="w-4 h-4 text-[#929A94] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <label htmlFor="priority-search" className="sr-only">
+              Filter priority queue by SKU or product name
+            </label>
+            <Search
+              className="w-4 h-4 text-[#58605A] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              aria-hidden="true"
+            />
             <input
+              id="priority-search"
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter SKU or name..."
-              className="w-full h-9 pl-9 pr-3 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8]/60 text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+              className="w-full h-9 pl-9 pr-3 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8]/60 text-sm text-[#292F2C]"
             />
           </div>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            aria-label="Filter priority queue by category"
-            className="h-9 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25"
-          >
-            <option value="All">All Categories</option>
-            {INVENTORY_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label htmlFor="priority-category-filter" className="sr-only">
+              Filter priority queue by category
+            </label>
+            <select
+              id="priority-category-filter"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-9 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
+            >
+              <option value="All">All Categories</option>
+              {INVENTORY_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Queue List */}
       {filteredItems.length === 0 ? (
         <EmptyState
           title="No items in this priority tier"
-          description="Great news—no products currently match this risk tier and filter combination."
+          description="No products currently match this risk tier and filter combination."
           action={
             <button
               type="button"
@@ -235,11 +250,11 @@ export function PriorityQueuePage({
           }
         />
       ) : (
-        <div className="space-y-3">
+        <section aria-label="Prioritized replenishment list" className="space-y-3">
           {filteredItems.map((item) => {
             const fullProd = productMap.get(item.productId);
             return (
-              <div
+              <article
                 key={item.productId}
                 className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:border-[#145A43]/40 transition-colors"
               >
@@ -247,19 +262,19 @@ export function PriorityQueuePage({
                   {fullProd && (
                     <ProductThumbnail
                       src={fullProd.imageUrl}
-                      alt={item.name}
+                      alt={`${item.name} (${item.category})`}
                       category={item.category}
                       className="w-14 h-14 rounded-lg"
                     />
                   )}
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-semibold text-[#292F2C]">
+                      <h2 className="text-base font-semibold text-[#292F2C]">
                         {item.name}
-                      </h3>
+                      </h2>
                       <StatusBadge status={item.status} />
                     </div>
-                    <div className="text-xs text-[#6B746E] mt-1">
+                    <div className="text-xs text-[#525A54] mt-1">
                       {item.category} · <span className="font-mono-num">{item.sku}</span>
                       {fullProd ? ` · ${fullProd.supplier}` : ''} · Lead time{' '}
                       <span className="font-mono-num">{item.leadTimeDays}d</span>
@@ -269,24 +284,24 @@ export function PriorityQueuePage({
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 lg:gap-6 items-center border-t lg:border-t-0 pt-3 lg:pt-0 border-[#E4DFD4] shrink-0">
                   <div>
-                    <div className="text-[11px] text-[#929A94]">On Hand / ROP</div>
+                    <div className="text-[11px] text-[#58605A]">On Hand / ROP</div>
                     <div className="font-mono-num text-sm font-semibold text-[#292F2C]">
                       {formatNumber(item.currentStock)} / {formatNumber(item.reorderPoint)}{' '}
-                      <span className="text-xs font-normal text-[#6B746E]">{item.unit}</span>
+                      <span className="text-xs font-normal text-[#525A54]">{item.unit}</span>
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-[11px] text-[#929A94]">Coverage & Risk</div>
+                    <div className="text-[11px] text-[#58605A]">Coverage & Risk</div>
                     <div className="font-mono-num text-sm font-semibold text-[#292F2C]">
                       {item.daysOfSupply}d ·{' '}
                       <span
                         className={
                           item.stockoutProbability >= 60
-                            ? 'text-[#A33B3B]'
+                            ? 'text-[#8C2D2D]'
                             : item.stockoutProbability >= 30
-                              ? 'text-[#9A6712]'
-                              : 'text-[#246642]'
+                              ? 'text-[#7A4E08]'
+                              : 'text-[#1B5736]'
                         }
                       >
                         {item.stockoutProbability}% risk
@@ -295,7 +310,7 @@ export function PriorityQueuePage({
                   </div>
 
                   <div>
-                    <div className="text-[11px] text-[#929A94]">Recommended PO</div>
+                    <div className="text-[11px] text-[#58605A]">Recommended PO</div>
                     <div className="font-mono-num text-sm font-semibold text-[#145A43]">
                       {item.recommendedOrderQty > 0
                         ? `+${formatNumber(item.recommendedOrderQty)} ${item.unit} (${formatINR(item.estimatedOrderCost)})`
@@ -311,7 +326,7 @@ export function PriorityQueuePage({
                           onClick={() => onOpenMovement(fullProd, 'restock')}
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#145A43] hover:bg-[#104735] text-xs font-semibold text-white transition-colors whitespace-nowrap"
                         >
-                          <ArrowDownLeft className="w-3.5 h-3.5" />
+                          <ArrowDownLeft className="w-3.5 h-3.5" aria-hidden="true" />
                           Restock
                         </button>
                         <button
@@ -319,17 +334,17 @@ export function PriorityQueuePage({
                           onClick={() => onOpenMovement(fullProd, 'sale')}
                           className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8] hover:bg-[#EEEAE0] text-xs font-semibold text-[#292F2C] transition-colors whitespace-nowrap"
                         >
-                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
                           Sale
                         </button>
                       </>
                     )}
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
-        </div>
+        </section>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import {
 } from '../../../shared/types';
 import type { ProductUpsertPayload } from '../../lib/api';
 import { CATEGORY_FALLBACK_IMAGE } from '../../lib/formatters';
+import { validateProductInput } from '../../lib/validation';
 import { Modal } from '../ui/Modal';
 import { ProductThumbnail } from '../ui/ProductThumbnail';
 
@@ -111,54 +112,30 @@ export function ProductFormModal({
     e.preventDefault();
     setError(null);
 
-    if (name.trim().length < 2) {
-      setError('Please enter a valid product name (at least 2 characters).');
-      return;
-    }
-    const qtyNum = Number(quantity);
-    const purNum = Number(purchasePrice);
-    const sellNum = Number(sellingPrice);
-    const reorderNum = Number(reorderLevel);
-    const maxNum = Number(maxStockLevel);
-    const leadNum = Number(leadTimeDays);
+    const validated = validateProductInput({
+      name,
+      sku,
+      category,
+      unit,
+      quantity: Number(quantity),
+      purchasePrice: Number(purchasePrice),
+      sellingPrice: Number(sellingPrice),
+      reorderLevel: Number(reorderLevel),
+      maxStockLevel: Number(maxStockLevel),
+      leadTimeDays: Number(leadTimeDays),
+      supplier,
+      seasonalityTag,
+      imageUrl: imageUrl.trim() || CATEGORY_FALLBACK_IMAGE[category],
+    });
 
-    if (!Number.isFinite(qtyNum) || qtyNum < 0) {
-      setError('Quantity must be 0 or higher.');
-      return;
-    }
-    if (!Number.isFinite(purNum) || purNum <= 0 || !Number.isFinite(sellNum) || sellNum <= 0) {
-      setError('Purchase and selling prices must be positive INR values.');
-      return;
-    }
-    if (sellNum < purNum) {
-      setError('Selling price should be greater than or equal to purchase cost.');
-      return;
-    }
-    if (!Number.isFinite(reorderNum) || reorderNum < 0 || !Number.isFinite(leadNum) || leadNum < 1) {
-      setError('Reorder level must be >= 0 and supplier lead time >= 1 day.');
+    if (!validated.ok) {
+      setError(validated.error);
       return;
     }
 
     setSubmitting(true);
     try {
-      await onSubmit(
-        {
-          name: name.trim(),
-          sku: sku.trim() || undefined,
-          category,
-          unit,
-          quantity: Math.round(qtyNum),
-          purchasePrice: purNum,
-          sellingPrice: sellNum,
-          reorderLevel: Math.round(reorderNum),
-          maxStockLevel: Math.max(Math.round(reorderNum) + 10, Math.round(maxNum)),
-          leadTimeDays: Math.round(leadNum),
-          supplier: supplier.trim() || 'Regional Wholesale Partner',
-          seasonalityTag: seasonalityTag.trim() || 'Steady Year-Round',
-          imageUrl: imageUrl.trim() || CATEGORY_FALLBACK_IMAGE[category],
-        },
-        initialProduct?.id
-      );
+      await onSubmit(validated.data, initialProduct?.id);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save product.');
@@ -183,54 +160,58 @@ export function ProductFormModal({
         {error && (
           <div
             role="alert"
-            className="px-3.5 py-2.5 rounded-lg bg-[#C65353]/10 border border-[#C65353]/30 text-sm text-[#A33B3B]"
+            className="px-3.5 py-2.5 rounded-lg bg-[#C65353]/12 border border-[#C65353]/35 text-sm text-[#8C2D2D]"
           >
             {error}
           </div>
         )}
 
-        {/* Section 1: Identity & Category */}
         <div className="space-y-3.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B746E] border-b border-[#E4DFD4] pb-1.5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#525A54] border-b border-[#E4DFD4] pb-1.5">
             Product Details
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-name" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Product Name *
               </label>
               <input
+                id="prod-name"
                 type="text"
                 required
+                maxLength={100}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Aged Basmati Rice"
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-sku" className="block text-xs font-medium text-[#292F2C] mb-1">
                 SKU Code
               </label>
               <input
+                id="prod-sku"
                 type="text"
+                maxLength={24}
                 value={sku}
                 onChange={(e) => setSku(e.target.value.toUpperCase())}
                 placeholder="Auto-generated"
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-category" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Category *
               </label>
               <select
+                id="prod-category"
                 value={category}
                 onChange={(e) => handleCategoryChange(e.target.value as InventoryCategory)}
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
               >
                 {INVENTORY_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
@@ -240,13 +221,14 @@ export function ProductFormModal({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-unit" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Unit of Measure *
               </label>
               <select
+                id="prod-unit"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value as ProductUnit)}
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
               >
                 {PRODUCT_UNITS.map((u) => (
                   <option key={u} value={u}>
@@ -258,31 +240,32 @@ export function ProductFormModal({
           </div>
         </div>
 
-        {/* Section 2: Pricing & Inventory Levels */}
         <div className="space-y-3.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B746E] border-b border-[#E4DFD4] pb-1.5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#525A54] border-b border-[#E4DFD4] pb-1.5">
             Pricing & Stock Thresholds
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-qty" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Available Qty ({unit}) *
               </label>
               <input
+                id="prod-qty"
                 type="number"
                 min="0"
                 step="1"
                 required
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-purchase-price" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Purchase Price (₹) *
               </label>
               <input
+                id="prod-purchase-price"
                 type="number"
                 min="1"
                 step="0.5"
@@ -290,14 +273,15 @@ export function ProductFormModal({
                 value={purchasePrice}
                 onChange={(e) => setPurchasePrice(e.target.value)}
                 placeholder="110"
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-selling-price" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Selling Price (₹) *
               </label>
               <input
+                id="prod-selling-price"
                 type="number"
                 min="1"
                 step="0.5"
@@ -305,80 +289,86 @@ export function ProductFormModal({
                 value={sellingPrice}
                 onChange={(e) => setSellingPrice(e.target.value)}
                 placeholder="145"
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-reorder" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Reorder Alert Level
               </label>
               <input
+                id="prod-reorder"
                 type="number"
                 min="0"
                 value={reorderLevel}
                 onChange={(e) => setReorderLevel(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-max-stock" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Max Target Stock
               </label>
               <input
+                id="prod-max-stock"
                 type="number"
                 min="10"
                 value={maxStockLevel}
                 onChange={(e) => setMaxStockLevel(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-lead-time" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Supplier Lead Time (Days)
               </label>
               <input
+                id="prod-lead-time"
                 type="number"
                 min="1"
                 max="60"
                 value={leadTimeDays}
                 onChange={(e) => setLeadTimeDays(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm font-mono-num text-[#292F2C]"
               />
             </div>
           </div>
         </div>
 
-        {/* Section 3: Supplier & Product Photo */}
         <div className="space-y-3.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B746E] border-b border-[#E4DFD4] pb-1.5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#525A54] border-b border-[#E4DFD4] pb-1.5">
             Supplier & Product Image
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-supplier" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Primary Supplier
               </label>
               <input
+                id="prod-supplier"
                 type="text"
+                maxLength={80}
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
                 placeholder="e.g., Karnal Agro Mills"
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#292F2C] mb-1">
+              <label htmlFor="prod-seasonality" className="block text-xs font-medium text-[#292F2C] mb-1">
                 Seasonal Profile
               </label>
               <input
+                id="prod-seasonality"
                 type="text"
+                maxLength={60}
                 value={seasonalityTag}
                 onChange={(e) => setSeasonalityTag(e.target.value)}
                 placeholder="e.g., Diwali & Wedding Peak"
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C]"
               />
             </div>
           </div>
@@ -386,22 +376,26 @@ export function ProductFormModal({
           <div className="flex flex-wrap items-center gap-4 pt-1">
             <ProductThumbnail
               src={imageUrl}
-              alt={name || category}
+              alt={`${name || category} preview`}
               category={category}
               className="w-16 h-16 rounded-lg"
             />
             <div className="flex-1 min-w-[200px]">
-              <label className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8] hover:bg-[#EEEAE0] text-xs font-semibold text-[#292F2C] cursor-pointer transition-colors">
-                <Upload className="w-3.5 h-3.5 text-[#145A43]" />
+              <label
+                htmlFor="prod-image-upload"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8] hover:bg-[#EEEAE0] text-xs font-semibold text-[#292F2C] cursor-pointer transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#145A43]" aria-hidden="true" />
                 Upload Product Photo
                 <input
+                  id="prod-image-upload"
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   onChange={handleImageUpload}
-                  className="hidden"
+                  className="sr-only"
                 />
               </label>
-              <p className="text-[11px] text-[#6B746E] mt-1.5">
+              <p className="text-[11px] text-[#525A54] mt-1.5">
                 Optional JPG/PNG/WebP under 1.5 MB. Defaults to category studio photo.
               </p>
             </div>
@@ -421,11 +415,7 @@ export function ProductFormModal({
             disabled={submitting}
             className="px-5 py-2 rounded-lg bg-[#145A43] hover:bg-[#104735] disabled:opacity-60 text-sm font-semibold text-[#FFFEFA] transition-colors"
           >
-            {submitting
-              ? 'Saving...'
-              : isEdit
-                ? 'Save Changes'
-                : 'Add Product'}
+            {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Product'}
           </button>
         </div>
       </form>

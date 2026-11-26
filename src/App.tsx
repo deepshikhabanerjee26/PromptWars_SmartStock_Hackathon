@@ -50,23 +50,30 @@ export default function App() {
   const [loadingForecast, setLoadingForecast] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Modals
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<EnrichedProduct | null>(null);
   const [movementProduct, setMovementProduct] = useState<EnrichedProduct | null>(null);
   const [movementMode, setMovementMode] = useState<'restock' | 'sale' | 'adjustment'>('restock');
   const [deletingProduct, setDeletingProduct] = useState<EnrichedProduct | null>(null);
 
-  // Toasts
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
 
-  const pushToast = useCallback((type: ToastItem['type'], message: string) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setToasts((prev) => [...prev, { id, type, message }]);
-    window.setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4200);
+  const announce = useCallback((msg: string) => {
+    setLiveAnnouncement(msg);
   }, []);
+
+  const pushToast = useCallback(
+    (type: ToastItem['type'], message: string) => {
+      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setToasts((prev) => [...prev, { id, type, message }]);
+      announce(message);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4200);
+    },
+    [announce]
+  );
 
   const loadAllData = useCallback(
     async (targetHorizon: ForecastHorizon, targetCategory: string, showFullLoader = false) => {
@@ -96,12 +103,19 @@ export default function App() {
     loadAllData(horizon, forecastCategory, true);
   }, [loadAllData, horizon, forecastCategory]);
 
+  const handleNavigate = (nextRoute: NavRoute) => {
+    setActiveRoute(nextRoute);
+    announce(`Navigated to ${ROUTE_TITLES[nextRoute]}`);
+  };
+
   const handleChangeHorizon = (next: ForecastHorizon) => {
     setHorizon(next);
+    announce(`Forecast horizon updated to ${next} days`);
   };
 
   const handleChangeForecastCategory = (nextCat: string) => {
     setForecastCategory(nextCat);
+    announce(`Forecast category filter updated to ${nextCat}`);
   };
 
   const handleSaveProduct = async (payload: ProductUpsertPayload, existingId?: string) => {
@@ -146,16 +160,29 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex bg-[#F5F1E8] text-[#292F2C]">
+      {/* Skip to main content link for keyboard & screen-reader users */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-[#145A43] focus:text-white focus:text-sm focus:font-semibold focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
+      {/* Polite aria-live region for dynamic state updates */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveAnnouncement}
+      </div>
+
       <Sidebar
         activeRoute={activeRoute}
-        onNavigate={setActiveRoute}
+        onNavigate={handleNavigate}
         priorityAlertCount={priorityAlertCount}
         mobileOpen={mobileNavOpen}
         onCloseMobile={() => setMobileNavOpen(false)}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Clean Contextual Top Bar */}
+        {/* Contextual Top Bar */}
         <header className="sticky top-0 z-30 h-14 bg-[#FFFEFA]/95 backdrop-blur-xs border-b border-[#E4DFD4] px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -164,13 +191,15 @@ export default function App() {
               aria-label="Open navigation menu"
               className="lg:hidden p-2 -ml-2 rounded-lg text-[#292F2C] hover:bg-[#EEEAE0]"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5" aria-hidden="true" />
             </button>
             <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm min-w-0">
               <span className="font-semibold text-[#145A43] hidden sm:inline whitespace-nowrap">
                 SmartStock
               </span>
-              <span className="text-[#929A94] hidden sm:inline">/</span>
+              <span className="text-[#58605A] hidden sm:inline" aria-hidden="true">
+                /
+              </span>
               <span className="font-medium text-[#292F2C] truncate">
                 {ROUTE_TITLES[activeRoute]}
               </span>
@@ -180,12 +209,19 @@ export default function App() {
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={() => loadAllData(horizon, forecastCategory, false)}
+              onClick={() => {
+                loadAllData(horizon, forecastCategory, false);
+                announce('Synchronizing inventory and forecasts');
+              }}
               disabled={loadingForecast}
               title="Refresh inventory & forecasts"
+              aria-label="Sync inventory and forecasts"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] hover:bg-[#EEEAE0] text-xs font-medium text-[#292F2C] transition-colors whitespace-nowrap"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingForecast ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${loadingForecast ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
               <span className="hidden sm:inline">Sync</span>
             </button>
             <button
@@ -196,14 +232,18 @@ export default function App() {
               }}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#145A43] hover:bg-[#104735] text-xs font-semibold text-white transition-colors whitespace-nowrap"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Add Product</span>
             </button>
           </div>
         </header>
 
         {/* Main Viewport */}
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-[1440px] w-full mx-auto">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-[1440px] w-full mx-auto focus:outline-none"
+        >
           {loading ? (
             <DashboardSkeleton />
           ) : error || !forecast ? (
@@ -219,7 +259,7 @@ export default function App() {
                   products={products}
                   activities={activities}
                   forecast={forecast}
-                  onNavigate={setActiveRoute}
+                  onNavigate={handleNavigate}
                   onSelectCategoryForInventory={(cat: InventoryCategory) =>
                     setInventoryCategoryJump(cat)
                   }
@@ -268,6 +308,7 @@ export default function App() {
                     setMovementProduct(prod);
                     setMovementMode(mode);
                   }}
+                  onAnnounce={announce}
                 />
               )}
 
@@ -284,6 +325,18 @@ export default function App() {
             </>
           )}
         </main>
+
+        {/* Semantic Footer Landmark */}
+        <footer className="border-t border-[#E4DFD4] bg-[#FFFEFA] px-4 sm:px-6 lg:px-8 py-4 text-xs text-[#525A54]">
+          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span>
+              SmartStock · AI Inventory & Demand Forecasting for Small Businesses
+            </span>
+            <span>
+              90% Confidence Bounds (Worst / Expected / Best) · 95% Service-Level Safety Stock
+            </span>
+          </div>
+        </footer>
       </div>
 
       {/* Modals */}

@@ -9,13 +9,14 @@
   --color-bg-secondary: #EEEAE0;
   --color-accent-gold: #E6A23C;
   --color-accent-amber: #D99A32;
+  /* Darkened secondary & muted tokens for >= 4.5:1 WCAG AA contrast */
   --color-text-primary: #292F2C;
-  --color-text-secondary: #6B746E;
-  --color-text-muted: #929A94;
-  --color-status-success: #38865B;
-  --color-status-warning: #D99A32;
-  --color-status-danger: #C65353;
-  --color-status-info: #527A9B;
+  --color-text-secondary: #525A54;
+  --color-text-muted: #58605A;
+  --color-status-success: #1E5C3A;
+  --color-status-warning: #7A4E08;
+  --color-status-danger: #9B2C2C;
+  --color-status-info: #2E4E68;
   --color-border-subtle: #E4DFD4;
 }
 
@@ -29,6 +30,17 @@
   h1, h2, h3, h4, .font-display {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     text-wrap: balance;
+  }
+
+  /* High-visibility keyboard focus indicator */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid #145A43;
+    outline-offset: 2px;
   }
 
   .font-mono-num {
@@ -52,12 +64,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #C7C1B5;
+  background: #B3ACA0;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #929A94;
+  background: #58605A;
 }
 
 @keyframes fadeSlideUp {
@@ -76,6 +88,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
   .animate-fade-slide {
     animation: none;
   }

@@ -122,13 +122,12 @@ export function InventoryPage({
 
   return (
     <div className="space-y-5 animate-fade-slide">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <section aria-labelledby="inventory-heading" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#292F2C] tracking-tight">
+          <h1 id="inventory-heading" className="text-2xl font-bold text-[#292F2C] tracking-tight">
             Inventory Catalog
           </h1>
-          <p className="text-sm text-[#6B746E] mt-1">
+          <p className="text-sm text-[#525A54] mt-1">
             Manage SKUs, stock quantities, INR margins, and real-time reorder thresholds.{' '}
             <span className="font-mono-num font-semibold text-[#292F2C]">
               Showing {filtered.length} of {products.length} products
@@ -140,21 +139,24 @@ export function InventoryPage({
           onClick={onAddProduct}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#145A43] hover:bg-[#104735] text-sm font-semibold text-white transition-colors whitespace-nowrap shrink-0"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" aria-hidden="true" />
           Add Product
         </button>
-      </div>
+      </section>
 
       {/* Filter & View Bar */}
-      <div className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl p-4 space-y-3.5">
+      <section aria-label="Inventory filters and sorting" className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl p-4 space-y-3.5">
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* Search Input */}
           <div className="relative flex-1">
+            <label htmlFor="inventory-search" className="sr-only">
+              Search inventory products
+            </label>
             <Search
-              className="w-4 h-4 text-[#929A94] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              className="w-4 h-4 text-[#58605A] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               aria-hidden="true"
             />
             <input
+              id="inventory-search"
               type="search"
               value={search}
               onChange={(e) => {
@@ -162,46 +164,52 @@ export function InventoryPage({
                 setPage(1);
               }}
               placeholder="Search by product name, SKU, or supplier..."
-              aria-label="Search inventory products"
-              className="w-full h-10 pl-9 pr-3 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8]/55 text-sm text-[#292F2C] placeholder:text-[#929A94] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43]"
+              className="w-full h-10 pl-9 pr-3 rounded-lg border border-[#E4DFD4] bg-[#F5F1E8]/55 text-sm text-[#292F2C] placeholder:text-[#58605A]"
             />
           </div>
 
-          {/* Category Filter */}
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
-            <select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setPage(1);
-                if (e.target.value === 'All') onClearInitialCategory?.();
-              }}
-              aria-label="Filter by category"
-              className="h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43] flex-1 sm:w-56"
-            >
-              <option value="All">All Categories ({INVENTORY_CATEGORIES.length})</option>
-              {INVENTORY_CATEGORIES.map((cat: InventoryCategory) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label htmlFor="inventory-category-filter" className="sr-only">
+                Filter by category
+              </label>
+              <select
+                id="inventory-category-filter"
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setPage(1);
+                  if (e.target.value === 'All') onClearInitialCategory?.();
+                }}
+                className="h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] flex-1 sm:w-56"
+              >
+                <option value="All">All Categories ({INVENTORY_CATEGORIES.length})</option>
+                {INVENTORY_CATEGORIES.map((cat: InventoryCategory) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            {/* Sort Selector */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
-              aria-label="Sort products"
-              className="h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] focus:outline-none focus:ring-2 focus:ring-[#145A43]/25 focus:border-[#145A43] sm:w-44"
-            >
-              <option value="priority">Sort: Priority Risk</option>
-              <option value="name">Sort: Name (A–Z)</option>
-              <option value="qty_asc">Sort: Qty (Low–High)</option>
-              <option value="qty_desc">Sort: Qty (High–Low)</option>
-              <option value="value_desc">Sort: Value (High–Low)</option>
-            </select>
+            <div>
+              <label htmlFor="inventory-sort" className="sr-only">
+                Sort products
+              </label>
+              <select
+                id="inventory-sort"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+                className="h-10 px-3 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-sm text-[#292F2C] sm:w-44"
+              >
+                <option value="priority">Sort: Priority Risk</option>
+                <option value="name">Sort: Name (A–Z)</option>
+                <option value="qty_asc">Sort: Qty (Low–High)</option>
+                <option value="qty_desc">Sort: Qty (High–Low)</option>
+                <option value="value_desc">Sort: Value (High–Low)</option>
+              </select>
+            </div>
 
-            {/* View Mode Toggle */}
             <div
               className="inline-flex items-center p-1 rounded-lg bg-[#EEEAE0] border border-[#E4DFD4] shrink-0"
               role="group"
@@ -215,10 +223,10 @@ export function InventoryPage({
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                   viewMode === 'table'
                     ? 'bg-[#FFFEFA] text-[#145A43] shadow-xs'
-                    : 'text-[#6B746E] hover:text-[#292F2C]'
+                    : 'text-[#525A54] hover:text-[#292F2C]'
                 }`}
               >
-                <Table2 className="w-3.5 h-3.5" />
+                <Table2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Table</span>
               </button>
               <button
@@ -229,25 +237,25 @@ export function InventoryPage({
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                   viewMode === 'card'
                     ? 'bg-[#FFFEFA] text-[#145A43] shadow-xs'
-                    : 'text-[#6B746E] hover:text-[#292F2C]'
+                    : 'text-[#525A54] hover:text-[#292F2C]'
                 }`}
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
+                <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Cards</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Status Segmented Tabs */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-[#E4DFD4]">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by stock status">
             {STATUS_TABS.map((tab) => {
               const active = statusFilter === tab.id;
               return (
                 <button
                   key={tab.id}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => {
                     setStatusFilter(tab.id);
                     setPage(1);
@@ -255,7 +263,7 @@ export function InventoryPage({
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
                     active
                       ? 'bg-[#145A43] text-white'
-                      : 'bg-[#F5F1E8] text-[#6B746E] hover:bg-[#EEEAE0] hover:text-[#292F2C]'
+                      : 'bg-[#F5F1E8] text-[#525A54] hover:bg-[#EEEAE0] hover:text-[#292F2C]'
                   }`}
                 >
                   {tab.label}
@@ -274,9 +282,8 @@ export function InventoryPage({
             </button>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Empty State */}
       {filtered.length === 0 ? (
         <EmptyState
           title="No matching inventory products"
@@ -292,34 +299,31 @@ export function InventoryPage({
           }
         />
       ) : viewMode === 'table' ? (
-        /* TABLE VIEW */
-        <div className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl overflow-hidden">
+        <section aria-label="Inventory table view" className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[860px]">
+              <caption className="sr-only">Inventory catalog products table</caption>
               <thead>
-                <tr className="border-b border-[#E4DFD4] bg-[#FAF7F0] text-[11px] font-semibold uppercase tracking-wider text-[#6B746E]">
-                  <th className="py-3 pl-5 pr-3">Product</th>
-                  <th className="py-3 px-3">Category</th>
-                  <th className="py-3 px-3">SKU</th>
-                  <th className="py-3 px-3 text-right">Qty</th>
-                  <th className="py-3 px-3">Unit</th>
-                  <th className="py-3 px-3 text-right">Purchase</th>
-                  <th className="py-3 px-3 text-right">Selling</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 pl-3 pr-5 text-right">Actions</th>
+                <tr className="border-b border-[#E4DFD4] bg-[#FAF7F0] text-[11px] font-semibold uppercase tracking-wider text-[#525A54]">
+                  <th scope="col" className="py-3 pl-5 pr-3">Product</th>
+                  <th scope="col" className="py-3 px-3">Category</th>
+                  <th scope="col" className="py-3 px-3">SKU</th>
+                  <th scope="col" className="py-3 px-3 text-right">Qty</th>
+                  <th scope="col" className="py-3 px-3">Unit</th>
+                  <th scope="col" className="py-3 px-3 text-right">Purchase</th>
+                  <th scope="col" className="py-3 px-3 text-right">Selling</th>
+                  <th scope="col" className="py-3 px-3">Status</th>
+                  <th scope="col" className="py-3 pl-3 pr-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E4DFD4] text-sm">
                 {paginated.map((prod) => (
-                  <tr
-                    key={prod.id}
-                    className="hover:bg-[#F5F1E8]/60 transition-colors"
-                  >
-                    <td className="py-3 pl-5 pr-3">
+                  <tr key={prod.id} className="hover:bg-[#F5F1E8]/60 transition-colors">
+                    <th scope="row" className="py-3 pl-5 pr-3 font-normal text-left">
                       <div className="flex items-center gap-3">
                         <ProductThumbnail
                           src={prod.imageUrl}
-                          alt={prod.name}
+                          alt={`${prod.name} (${prod.category})`}
                           category={prod.category}
                           className="w-10 h-10 rounded-lg"
                         />
@@ -327,13 +331,13 @@ export function InventoryPage({
                           <div className="font-semibold text-[#292F2C] truncate max-w-[220px]">
                             {prod.name}
                           </div>
-                          <div className="text-xs text-[#6B746E] truncate max-w-[220px]">
+                          <div className="text-xs text-[#525A54] truncate max-w-[220px]">
                             {prod.supplier}
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="py-3 px-3 text-xs text-[#6B746E] whitespace-nowrap">
+                    </th>
+                    <td className="py-3 px-3 text-xs text-[#525A54] whitespace-nowrap">
                       {prod.category}
                     </td>
                     <td className="py-3 px-3 font-mono-num text-xs text-[#292F2C] whitespace-nowrap">
@@ -342,8 +346,8 @@ export function InventoryPage({
                     <td className="py-3 px-3 text-right font-mono-num font-semibold text-[#292F2C]">
                       {formatNumber(prod.quantity)}
                     </td>
-                    <td className="py-3 px-3 text-xs text-[#6B746E]">{prod.unit}</td>
-                    <td className="py-3 px-3 text-right font-mono-num text-[#6B746E]">
+                    <td className="py-3 px-3 text-xs text-[#525A54]">{prod.unit}</td>
+                    <td className="py-3 px-3 text-right font-mono-num text-[#525A54]">
                       {formatINR(prod.purchasePrice)}
                     </td>
                     <td className="py-3 px-3 text-right font-mono-num font-medium text-[#292F2C]">
@@ -361,34 +365,34 @@ export function InventoryPage({
                           aria-label={`Restock ${prod.name}`}
                           className="p-1.5 rounded-lg text-[#145A43] hover:bg-[#145A43]/10 transition-colors"
                         >
-                          <ArrowDownLeft className="w-4 h-4" />
+                          <ArrowDownLeft className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
                           onClick={() => onOpenMovement(prod, 'sale')}
                           title="Record sale"
                           aria-label={`Record sale for ${prod.name}`}
-                          className="p-1.5 rounded-lg text-[#9A6712] hover:bg-[#E6A23C]/15 transition-colors"
+                          className="p-1.5 rounded-lg text-[#7A4E08] hover:bg-[#E6A23C]/15 transition-colors"
                         >
-                          <ArrowUpRight className="w-4 h-4" />
+                          <ArrowUpRight className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
                           onClick={() => onEditProduct(prod)}
                           title="Edit product"
                           aria-label={`Edit ${prod.name}`}
-                          className="p-1.5 rounded-lg text-[#6B746E] hover:text-[#292F2C] hover:bg-[#EEEAE0] transition-colors"
+                          className="p-1.5 rounded-lg text-[#525A54] hover:text-[#292F2C] hover:bg-[#EEEAE0] transition-colors"
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
                           onClick={() => onDeleteProduct(prod)}
                           title="Delete product"
                           aria-label={`Delete ${prod.name}`}
-                          className="p-1.5 rounded-lg text-[#6B746E] hover:text-[#C65353] hover:bg-[#C65353]/10 transition-colors"
+                          className="p-1.5 rounded-lg text-[#525A54] hover:text-[#8C2D2D] hover:bg-[#C65353]/10 transition-colors"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </td>
@@ -397,19 +401,18 @@ export function InventoryPage({
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       ) : (
-        /* CARD VIEW */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+        <section aria-label="Inventory card view" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
           {paginated.map((prod) => (
-            <div
+            <article
               key={prod.id}
               className="bg-[#FFFEFA] border border-[#E4DFD4] rounded-xl overflow-hidden flex flex-col hover:border-[#145A43]/40 transition-colors"
             >
               <div className="relative aspect-[4/3] bg-[#EEEAE0] overflow-hidden">
                 <ProductThumbnail
                   src={prod.imageUrl}
-                  alt={prod.name}
+                  alt={`${prod.name} (${prod.category})`}
                   category={prod.category}
                   className="w-full h-full rounded-none border-0"
                 />
@@ -419,22 +422,22 @@ export function InventoryPage({
               </div>
 
               <div className="p-4 flex-1 flex flex-col">
-                <div className="text-xs text-[#6B746E] truncate">
+                <div className="text-xs text-[#525A54] truncate">
                   {prod.category} · <span className="font-mono-num">{prod.sku}</span>
                 </div>
-                <h3 className="text-base font-semibold text-[#292F2C] mt-1 line-clamp-1">
+                <h2 className="text-base font-semibold text-[#292F2C] mt-1 line-clamp-1">
                   {prod.name}
-                </h3>
+                </h2>
 
                 <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#E4DFD4] text-xs">
                   <div>
-                    <div className="text-[#929A94]">Available</div>
+                    <div className="text-[#58605A]">Available</div>
                     <div className="font-mono-num text-sm font-bold text-[#292F2C] mt-0.5">
                       {formatNumber(prod.quantity)} {prod.unit}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[#929A94]">Buy / Sell</div>
+                    <div className="text-[#58605A]">Buy / Sell</div>
                     <div className="font-mono-num text-sm font-semibold text-[#292F2C] mt-0.5">
                       {formatINR(prod.purchasePrice)} / {formatINR(prod.sellingPrice)}
                     </div>
@@ -463,30 +466,29 @@ export function InventoryPage({
                       type="button"
                       onClick={() => onEditProduct(prod)}
                       aria-label={`Edit ${prod.name}`}
-                      className="p-1.5 rounded-lg text-[#6B746E] hover:text-[#292F2C] hover:bg-[#EEEAE0]"
+                      className="p-1.5 rounded-lg text-[#525A54] hover:text-[#292F2C] hover:bg-[#EEEAE0]"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-4 h-4" aria-hidden="true" />
                     </button>
                     <button
                       type="button"
                       onClick={() => onDeleteProduct(prod)}
                       aria-label={`Delete ${prod.name}`}
-                      className="p-1.5 rounded-lg text-[#6B746E] hover:text-[#C65353] hover:bg-[#C65353]/10"
+                      className="p-1.5 rounded-lg text-[#525A54] hover:text-[#8C2D2D] hover:bg-[#C65353]/10"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
+            </article>
           ))}
-        </div>
+        </section>
       )}
 
-      {/* Pagination */}
       {filtered.length > PAGE_SIZE && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          <div className="text-xs text-[#6B746E] font-mono-num">
+        <nav aria-label="Inventory pagination" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          <div className="text-xs text-[#525A54] font-mono-num">
             Page {safePage} of {totalPages} · Showing {(safePage - 1) * PAGE_SIZE + 1}–
             {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
           </div>
@@ -497,7 +499,7 @@ export function InventoryPage({
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-xs font-semibold text-[#292F2C] disabled:opacity-45 hover:bg-[#EEEAE0] transition-colors"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
               Previous
             </button>
             <button
@@ -507,10 +509,10 @@ export function InventoryPage({
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#E4DFD4] bg-[#FFFEFA] text-xs font-semibold text-[#292F2C] disabled:opacity-45 hover:bg-[#EEEAE0] transition-colors"
             >
               Next
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
-        </div>
+        </nav>
       )}
     </div>
   );
